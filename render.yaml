@@ -1,0 +1,15 @@
+# Render-Blueprint: beschreibt, wie Render die App baut und startet.
+services:
+  - type: web
+    name: community-run
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: ADMIN_PIN
+        sync: false   # Render fragt den Wert beim Einrichten ab; er steht nicht im Code
+      - key: NODE_VERSION
+        value: "22"
