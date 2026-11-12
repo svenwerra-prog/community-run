@@ -208,3 +208,28 @@ input[type=datetime-local] { color-scheme: light; }
 .countdown #countNum { font: 900 42vmin/1 var(--head); letter-spacing: -.05em; color: var(--yellow); font-variant-numeric: tabular-nums; }
 .countdown p { font: 900 22px var(--head); text-transform: uppercase; color: var(--aqua); }
 .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 11; background: var(--text); color: #fff; padding: 10px 18px; border-radius: 50px; font-size: 14px; font-weight: 600; max-width: 90vw; text-align: center; }
+
+/* ---------- Regeln, Melden, Blockieren, Konto ---------- */
+a { color: var(--purple); font-weight: 700; }
+.accept { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--text); font-size: 14px; margin-top: 14px; }
+.accept input { width: 22px; height: 22px; flex: 0 0 auto; margin: 0; accent-color: var(--pink); }
+.hint.first { margin-top: 0; }
+.legal-links { font-size: 14px; margin: 10px 0 12px; }
+.btn.danger-outline { border-color: var(--danger); color: var(--danger); }
+.msg.tappable { cursor: pointer; }
+.inline-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--pink); margin-left: 8px; }
+.members li.report { grid-template-columns: 1fr; }
+.report .quote { font-weight: 400; color: var(--text); background: #f6f3fc; border-radius: 12px; padding: 8px 10px; margin-top: 6px; overflow-wrap: anywhere; }
+.report .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sheet { position: fixed; inset: 0; z-index: 12; background: rgba(26, 16, 51, .55); display: flex; align-items: flex-end; justify-content: center; }
+.sheet-box { width: 100%; max-width: 520px; background: #fff; border-radius: 24px 24px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+.sheet-title { font: 900 16px var(--head); color: var(--purple); text-align: center; }
+
+/* ---------- Textseiten (Datenschutz, Impressum, Regeln) ---------- */
+.legal { max-width: 720px; margin: 0 auto; padding: 20px 16px 48px; }
+.legal h1 { color: var(--purple); font-size: 30px; margin-bottom: 14px; }
+.legal h2 { margin: 26px 0 8px; font-size: 16px; }
+.legal p, .legal li { font-size: 15px; line-height: 1.55; }
+.legal mark { background: var(--yellow); padding: 0 4px; border-radius: 4px; }
+.legal .back { display: inline-block; margin-bottom: 14px; }
+.legal .draft { background: #fff7c2; border: 2px solid var(--yellow); border-radius: 14px; padding: 10px 14px; font-size: 14px; }

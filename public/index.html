@@ -37,6 +37,9 @@
         <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN">
       </label>
     </details>
+    <label class="accept"><input type="checkbox" id="acceptInput" required>
+      <span>Ich akzeptiere die <a href="regeln.html" target="_blank" rel="noopener">Nutzungsregeln</a> und habe die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> gelesen.</span>
+    </label>
     <p id="loginError" class="error" hidden></p>
     <button class="btn primary big" type="submit">Beitreten</button>
     <p class="hint">Name und E-Mail werden gespeichert, damit du zur Community gehörst und zu Events eingeladen werden kannst. Deine E-Mail sieht nur der Organisator.</p>
@@ -135,6 +138,20 @@
         <button id="btnCopyMails" class="btn small" type="button">E-Mail-Adressen kopieren</button>
         <ul id="members" class="members"></ul>
       </div>
+      <div id="reportsCard" class="card admin" hidden>
+        <h2>Meldungen <span id="reportCount" class="muted"></span><i id="reportBadge" class="inline-dot" hidden></i></h2>
+        <ul id="reports" class="members"></ul>
+      </div>
+      <div id="blockedBox" class="card" hidden>
+        <h2>Von dir blockiert</h2>
+        <ul id="blockedList" class="members"></ul>
+      </div>
+      <div class="card">
+        <h2>Regeln &amp; Rechtliches</h2>
+        <p class="hint first">Unpassende Nachricht? Im Chat die Nachricht antippen, dann „Melden“ oder „Blockieren“ wählen.</p>
+        <p class="legal-links"><a href="regeln.html" target="_blank" rel="noopener">Nutzungsregeln</a> · <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a> · <a href="impressum.html" target="_blank" rel="noopener">Impressum</a></p>
+        <button id="btnDeleteAccount" class="btn small danger-outline" type="button">Konto und Daten löschen</button>
+      </div>
       <div class="card">
         <h2>App</h2>
         <button id="btnInstall2" class="btn big" type="button" hidden>📲 Als App auf den Startbildschirm</button>
@@ -182,6 +199,7 @@
 
 <div id="countdown" class="countdown" hidden><div id="countNum">10</div><p>Gleich geht's los!</p></div>
 <div id="toast" class="toast" hidden></div>
+<div id="sheet" class="sheet" hidden><div id="sheetBox" class="sheet-box"></div></div>
 
 <script src="app.js"></script>
 </body>

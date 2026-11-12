@@ -139,7 +139,7 @@
     ws = sock;
     sock.onopen = () => {
       if (ws !== sock) return;
-      send({ t: 'hello', token, name: myName, email: myEmail, pin: pin || undefined });
+      send({ t: 'hello', token, name: myName, email: myEmail, pin: pin || undefined, accept: $('#acceptInput').checked });
       bestRtt = Infinity;
       for (let i = 0; i < 5; i++) setTimeout(() => send({ t: 'ping', t0: Date.now() }), i * 400);
     };
@@ -208,6 +208,11 @@
         events = m.events || [];
         results = m.results || [];
         members = m.members || [];
+        reports = m.reports || [];
+        blocked = new Set(me.blocked || []);
+        $('#reportsCard').hidden = !me.admin;
+        renderReports();
+        renderBlocked();
         $('#login').hidden = true;
         $('#app').hidden = false;
         $('#adminPanel').hidden = !me.admin;
@@ -217,9 +222,8 @@
         renderHistory();
         renderMembers();
         if (focusEvent && events.some((e) => e.id === focusEvent)) showTab('community');
-        $('#chatList').textContent = '';
-        m.chat.forEach((c) => addChat(c, true));
-        scrollChat();
+        chatLog = m.chat.slice();
+        renderChatAll();
         onRun(m.run);
         renderBoard();
         renderBadges();
@@ -252,7 +256,34 @@
         toast('Du wurdest vom Organisator aus der Community entfernt.', 10000);
         break;
       case 'chat':
+        chatLog.push(m.msg);
+        if (chatLog.length > 300) chatLog.shift();
         addChat(m.msg, false);
+        break;
+      case 'chat:removed': {
+        chatLog = chatLog.filter((c) => c.id !== m.id);
+        const node = document.querySelector(`#chatList [data-id="${CSS.escape(String(m.id))}"]`);
+        if (node) node.remove();
+        break;
+      }
+      case 'blocked':
+        blocked = new Set(m.blocked || []);
+        renderChatAll();
+        renderBlocked();
+        renderCallMeta();
+        break;
+      case 'reported':
+        toast(m.ok ? 'Danke – die Meldung ist beim Organisator angekommen.' : 'Du hast bereits viele offene Meldungen. Bitte warte, bis sie bearbeitet sind.', 5000);
+        break;
+      case 'reports':
+        reports = m.reports || [];
+        renderReports();
+        break;
+      case 'deleted':
+        stopReconnect = true;
+        try { for (const k of ['token', 'name', 'email', 'track']) localStorage.removeItem(NS + k); } catch {}
+        alert('Dein Konto und deine Daten wurden gelöscht.');
+        location.reload();
         break;
       case 'call:peers':
         m.peers.forEach((id) => makePeer(id, true));
@@ -783,8 +814,94 @@
     location.reload();
   });
 
+  // ---------- Konto löschen ----------
+  $('#btnDeleteAccount').addEventListener('click', () => {
+    if (!confirm('Konto wirklich löschen? Dein Name, deine E-Mail, deine Zusagen und deine Chat-Nachrichten werden entfernt. In gespeicherten Ranglisten erscheinst du nur noch als „Gelöschtes Mitglied“.')) return;
+    if (!confirm('Das lässt sich nicht rückgängig machen. Jetzt endgültig löschen?')) return;
+    send({ t: 'account:delete' });
+  });
+
+  // ---------- Melden & Blockieren ----------
+  let blocked = new Set(), reports = [], chatLog = [];
+  function openSheet(title, actions) {
+    const sheet = $('#sheet'), box = $('#sheetBox');
+    box.textContent = '';
+    box.append(el('div', 'sheet-title', title));
+    for (const a of actions) {
+      const b = el('button', 'btn big' + (a.danger ? ' danger' : ''), a.label);
+      b.addEventListener('click', () => { sheet.hidden = true; a.run(); });
+      box.append(b);
+    }
+    const c = el('button', 'btn big', 'Abbrechen');
+    c.addEventListener('click', () => (sheet.hidden = true));
+    box.append(c);
+    sheet.hidden = false;
+  }
+  $('#sheet').addEventListener('click', (e) => { if (e.target.id === 'sheet') $('#sheet').hidden = true; });
+
+  function messageMenu(c) {
+    const actions = [
+      { label: '🚩 Nachricht melden', run: () => send({ t: 'report', msgId: c.id }) },
+      { label: `🚫 ${c.name} blockieren`, run: () => { if (confirm(`${c.name} blockieren? Du siehst dann keine Nachrichten mehr von dieser Person und hörst sie im Call nicht.`)) send({ t: 'block', id: c.from, on: true }); } },
+    ];
+    if (me.admin) actions.push({ label: '🗑️ Nachricht für alle löschen', danger: true, run: () => send({ t: 'chat:delete', id: c.id }) });
+    openSheet(`Nachricht von ${c.name}`, actions);
+  }
+
+  function renderBlocked() {
+    const box = $('#blockedBox');
+    const list = roster.filter((u) => blocked.has(u.id));
+    box.hidden = list.length === 0;
+    const ul = $('#blockedList');
+    ul.textContent = '';
+    for (const u of list) {
+      const li = el('li');
+      li.append(el('div', 'who', u.name));
+      const b = el('button', 'btn small', 'Freigeben');
+      b.addEventListener('click', () => send({ t: 'block', id: u.id, on: false }));
+      li.append(b);
+      ul.append(li);
+    }
+  }
+
+  // Meldungen (nur Organisator)
+  function renderReports() {
+    if (!me || !me.admin) return;
+    const ul = $('#reports');
+    ul.textContent = '';
+    $('#reportCount').textContent = reports.length ? `· ${reports.length}` : '';
+    $('#reportBadge').hidden = reports.length === 0;
+    if (!reports.length) { ul.append(el('li', 'empty-note', 'Keine offenen Meldungen.')); return; }
+    for (const r of reports) {
+      const li = el('li', 'report');
+      const who = el('div', 'who', `${r.targetName} – gemeldet von ${r.byName}`);
+      who.append(el('small', null, fmtDate(r.at) + ' Uhr'));
+      if (r.text) who.append(el('div', 'quote', '„' + r.text + '“'));
+      li.append(who);
+      const actions = el('div', 'actions');
+      if (r.msgId) {
+        const bMsg = el('button', 'btn small', 'Nachricht löschen');
+        bMsg.addEventListener('click', () => send({ t: 'chat:delete', id: r.msgId }));
+        actions.append(bMsg);
+      }
+      const bRem = el('button', 'btn small', 'Mitglied entfernen');
+      bRem.addEventListener('click', () => { if (confirm(`${r.targetName} aus der Community entfernen?`)) { send({ t: 'member:remove', id: r.targetId }); send({ t: 'report:close', id: r.id }); } });
+      const bOk = el('button', 'btn small', 'Erledigt');
+      bOk.addEventListener('click', () => send({ t: 'report:close', id: r.id }));
+      actions.append(bRem, bOk);
+      li.append(actions);
+      ul.append(li);
+    }
+  }
+
   // ---------- Chat ----------
+  function renderChatAll() {
+    $('#chatList').textContent = '';
+    chatLog.forEach((c) => addChat(c, true));
+    scrollChat();
+  }
   function addChat(c, initial) {
+    if (!c.sys && blocked.has(c.from)) return; // blockierte Personen ausblenden
     const list = $('#chatList');
     const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
     const div = document.createElement('div');
@@ -801,7 +918,13 @@
       head.append(from, time);
       const body = document.createElement('div'); body.textContent = c.text;
       div.append(head, body);
+      if (!mine) {
+        // Antippen öffnet Melden/Blockieren
+        div.classList.add('tappable');
+        div.addEventListener('click', () => messageMenu(c));
+      }
     }
+    if (c.id) div.dataset.id = c.id;
     list.append(div);
     if (initial) return;
     if (activeTab === 'chat') { if (nearBottom) scrollChat(); }
@@ -996,8 +1119,10 @@
     for (const [id, p] of peers) {
       const u = roster.find((x) => x.id === id);
       if (!u) continue;
-      p.name.textContent = u.name + (u.audio ? '' : ' 🔇');
-      p.video.hidden = !u.video;
+      const isBlocked = blocked.has(id);
+      p.name.textContent = u.name + (isBlocked ? ' 🚫 blockiert' : u.audio ? '' : ' 🔇');
+      p.video.hidden = !u.video || isBlocked;
+      p.audio.muted = isBlocked;
     }
   }
 
@@ -1010,6 +1135,7 @@
   // ---------- Anmeldung ----------
   $('#nameInput').value = store.get('name') || '';
   $('#emailInput').value = store.get('email') || '';
+  $('#acceptInput').checked = store.get('accepted') === '1';
   let gpsStarted = false;
   $('#loginForm').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1020,6 +1146,7 @@
     $('#pinInput').value = '';
     store.set('name', myName);
     store.set('email', myEmail);
+    store.set('accepted', $('#acceptInput').checked ? '1' : '');
     $('#loginError').hidden = true;
     unlockAudio();     // Töne brauchen eine Nutzer-Geste
     keepAwake();
