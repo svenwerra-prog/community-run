@@ -21,7 +21,10 @@
 
   // ---------- Zustand ----------
   let ws = null, connected = false, stopReconnect = false, loggedIn = false;
-  let me = null, myName = '', pin = '';
+  let me = null, myName = '', myEmail = '', pin = '';
+  let events = [], results = [], members = [];
+  const NO_STATS = { distance: 0, elapsed: 0, splits: [], lap: 0, finished: false, finishMs: 0 };
+  const withStats = (list) => (list || []).map((u) => ({ ...u, stats: u.stats || NO_STATS }));
   let run = { id: 0, status: 'idle', title: 'Community Run', targetKm: 0, startAt: null, endedAt: null };
   let roster = [];
   let clockOffset = 0, bestRtt = Infinity;
@@ -48,6 +51,15 @@
   }
   const fmtKm = (m) => (m / 1000).toFixed(2).replace('.', ',');
   const initials = (name) => name.trim().slice(0, 2).toUpperCase();
+  const fmtDate = (ms) => new Date(ms).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const fmtDay = (ms) => new Date(ms).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const focusEvent = params.get('event'); // Einladungslink: direkt zum Event springen
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
 
   function toast(text, ms = 3500) {
     const t = $('#toast');
@@ -111,7 +123,7 @@
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
     ws.onopen = () => {
-      send({ t: 'hello', token, name: myName, pin: pin || undefined });
+      send({ t: 'hello', token, name: myName, email: myEmail, pin: pin || undefined });
       bestRtt = Infinity;
       for (let i = 0; i < 5; i++) setTimeout(() => send({ t: 'ping', t0: Date.now() }), i * 400);
     };
@@ -154,10 +166,19 @@
         me = m.you;
         if (Number.isFinite(m.now) && bestRtt === Infinity) clockOffset = m.now - Date.now();
         if (m.iceServers) iceServers = m.iceServers;
-        roster = m.roster || [];
+        roster = withStats(m.roster);
+        events = m.events || [];
+        results = m.results || [];
+        members = m.members || [];
         $('#login').hidden = true;
         $('#app').hidden = false;
         $('#adminPanel').hidden = !me.admin;
+        $('#eventForm').hidden = !me.admin;
+        $('#membersCard').hidden = !me.admin;
+        renderEvents();
+        renderHistory();
+        renderMembers();
+        if (focusEvent && events.some((e) => e.id === focusEvent)) showTab('community');
         $('#chatList').textContent = '';
         m.chat.forEach((c) => addChat(c, true));
         scrollChat();
@@ -170,9 +191,27 @@
         onRun(m.run);
         break;
       case 'roster':
-        roster = m.roster;
+        roster = withStats(m.roster);
         renderBoard();
         renderCallMeta();
+        renderEvents();
+        break;
+      case 'events':
+        events = m.events || [];
+        renderEvents();
+        renderAdmin();
+        break;
+      case 'results':
+        results = m.results || [];
+        renderHistory();
+        break;
+      case 'members':
+        members = m.members || [];
+        renderMembers();
+        break;
+      case 'removed':
+        stopReconnect = true;
+        toast('Du wurdest vom Organisator aus der Community entfernt.', 10000);
         break;
       case 'chat':
         addChat(m.msg, false);
@@ -407,7 +446,8 @@
   function renderBoard() {
     const ul = $('#board');
     ul.textContent = '';
-    const list = [...roster].sort((a, b) => {
+    // Nur wer online ist oder in diesem Lauf schon Strecke hat
+    const list = roster.filter((u) => u.online || u.stats.distance > 0).sort((a, b) => {
       if (a.stats.finished !== b.stats.finished) return a.stats.finished ? -1 : 1;
       if (a.stats.finished) return a.stats.finishMs - b.stats.finishMs;
       return b.stats.distance - a.stats.distance || a.name.localeCompare(b.name);
@@ -420,7 +460,7 @@
       if (!u.online) li.classList.add('offline');
       const pos = document.createElement('div'); pos.className = 'pos'; pos.textContent = s.finished ? '🏁' : i + 1;
       const who = document.createElement('div'); who.className = 'who';
-      who.textContent = u.name + (u.admin ? ' ⭐' : '') + (u.inCall ? ' 🎧' : '');
+      who.textContent = u.name + (u.organizer ? ' ⭐' : '') + (u.inCall ? ' 🎧' : '');
       const small = document.createElement('small');
       small.textContent = !u.online ? 'offline' : s.finished ? `im Ziel nach ${fmtTime(s.finishMs)}`
         : s.splits.length ? `letzter km ${fmtPace(s.splits[s.splits.length - 1])}` : run.status === 'running' ? 'unterwegs' : 'bereit';
@@ -443,14 +483,36 @@
     $('#btnStart').hidden = !idle;
     $('#btnStop').hidden = run.status !== 'running';
     $('#btnReset').hidden = idle;
-    for (const id of ['#cfgTitle', '#cfgTarget', '#cfgCountdown']) $(id).disabled = !idle;
+    for (const id of ['#cfgTitle', '#cfgTarget', '#cfgCountdown', '#cfgEvent']) $(id).disabled = !idle;
+    const sel = $('#cfgEvent');
+    sel.textContent = '';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '– freier Lauf ohne Event –';
+    sel.append(none);
+    for (const ev of events.filter((e) => !e.done || e.id === run.eventId)) {
+      const o = document.createElement('option');
+      o.value = ev.id;
+      o.textContent = `${ev.title} (${fmtDate(ev.at)})`;
+      sel.append(o);
+    }
+    sel.value = run.eventId || '';
     if (document.activeElement !== $('#cfgTitle')) $('#cfgTitle').value = run.title;
     if (document.activeElement !== $('#cfgTarget')) $('#cfgTarget').value = run.targetKm;
     $('#adminInfo').textContent = idle
       ? 'Der Start löst auf allen angemeldeten Geräten gleichzeitig den Countdown und die Messung aus.'
-      : run.status === 'running' ? '„Lauf beenden“ stoppt die Messung bei allen.' : 'Mit „Neuen Lauf vorbereiten“ wird die Rangliste geleert.';
+      : run.status === 'running' ? '„Lauf beenden“ stoppt die Messung bei allen und speichert die Rangliste dauerhaft.'
+        : 'Die Rangliste ist unter „Gespeicherte Läufe“ abgelegt. „Neuen Lauf vorbereiten“ leert nur die Live-Ansicht.';
   }
-  const sendConfig = () => send({ t: 'config', title: $('#cfgTitle').value, targetKm: parseFloat($('#cfgTarget').value.replace(',', '.')) || 0 });
+  const sendConfig = () => send({
+    t: 'config', title: $('#cfgTitle').value, eventId: $('#cfgEvent').value || null,
+    targetKm: parseFloat($('#cfgTarget').value.replace(',', '.')) || 0,
+  });
+  $('#cfgEvent').addEventListener('change', () => {
+    const ev = events.find((e) => e.id === $('#cfgEvent').value);
+    if (ev) { $('#cfgTitle').value = ev.title; $('#cfgTarget').value = ev.targetKm; }
+    sendConfig();
+  });
   $('#cfgTitle').addEventListener('change', sendConfig);
   $('#cfgTarget').addEventListener('change', sendConfig);
   $('#btnStart').addEventListener('click', () => {
@@ -458,8 +520,192 @@
     const n = roster.filter((u) => u.online).length;
     if (confirm(`Lauf jetzt für alle ${n} Teilnehmer starten?`)) send({ t: 'start', countdown: parseInt($('#cfgCountdown').value, 10) || 10 });
   });
-  $('#btnStop').addEventListener('click', () => { if (confirm('Lauf für alle beenden?')) send({ t: 'stop' }); });
+  $('#btnStop').addEventListener('click', () => { if (confirm('Lauf für alle beenden und die Rangliste speichern?')) send({ t: 'stop' }); });
   $('#btnReset').addEventListener('click', () => { if (confirm('Rangliste leeren und neuen Lauf vorbereiten?')) send({ t: 'reset' }); });
+
+  // ---------- Events & Zusagen ----------
+  const nameById = (id) => (roster.find((u) => u.id === id) || {}).name;
+  function renderEvents() {
+    const box = $('#events');
+    box.textContent = '';
+    const list = [...events].sort((a, b) => a.done - b.done || a.at - b.at);
+    if (!list.length) box.append(el('div', 'empty-note', 'Noch kein Event geplant.'));
+    let unanswered = 0;
+    for (const ev of list) {
+      const mine = me ? ev.rsvp[me.id] : null;
+      if (!ev.done && !mine) unanswered++;
+      const yes = [], no = [];
+      for (const [id, a] of Object.entries(ev.rsvp)) {
+        const n = nameById(id);
+        if (n) (a === 'yes' ? yes : no).push(n);
+      }
+      const pending = roster.filter((u) => !ev.rsvp[u.id]).map((u) => u.name);
+
+      const card = el('div', 'event' + (ev.done ? ' done' : '') + (ev.id === focusEvent ? ' highlight' : ''));
+      card.append(el('h3', null, ev.title + (ev.done ? ' – abgeschlossen' : '')));
+      card.append(el('div', 'when', `${fmtDate(ev.at)} Uhr` + (ev.targetKm > 0 ? ` · ${String(ev.targetKm).replace('.', ',')} km` : '')));
+      if (ev.note) card.append(el('div', 'note', ev.note));
+      card.append(el('div', 'counts', `✅ ${yes.length} dabei · ❌ ${no.length} nicht dabei · ❔ ${pending.length} offen`));
+      if (yes.length) card.append(el('div', 'names', 'Dabei: ' + yes.join(', ')));
+      if (me && me.admin) {
+        if (no.length) card.append(el('div', 'names', 'Nicht dabei: ' + no.join(', ')));
+        if (pending.length) card.append(el('div', 'names', 'Noch offen: ' + pending.join(', ')));
+      }
+
+      const actions = el('div', 'actions');
+      if (!ev.done) {
+        const bYes = el('button', 'btn yes' + (mine === 'yes' ? ' on' : ''), '✅ Bin dabei');
+        const bNo = el('button', 'btn no' + (mine === 'no' ? ' on' : ''), '❌ Nicht dabei');
+        bYes.addEventListener('click', () => send({ t: 'rsvp', eventId: ev.id, answer: mine === 'yes' ? null : 'yes' }));
+        bNo.addEventListener('click', () => send({ t: 'rsvp', eventId: ev.id, answer: mine === 'no' ? null : 'no' }));
+        const bShare = el('button', 'btn', '🔗 Einladung teilen');
+        bShare.addEventListener('click', () => shareEvent(ev));
+        actions.append(bYes, bNo, bShare);
+      }
+      if (me && me.admin) {
+        const bDel = el('button', 'btn small', 'Löschen');
+        bDel.addEventListener('click', () => { if (confirm(`Event „${ev.title}“ mit allen Zusagen löschen?`)) send({ t: 'event:delete', id: ev.id }); });
+        actions.append(bDel);
+      }
+      card.append(actions);
+      box.append(card);
+    }
+    $('#eventBadge').hidden = unanswered === 0 || activeTab === 'community';
+  }
+
+  async function shareEvent(ev) {
+    const url = `${location.origin}/?event=${encodeURIComponent(ev.id)}`;
+    const text = `Community Run: ${ev.title} am ${fmtDate(ev.at)} Uhr – bist du dabei? Hier zu- oder absagen:`;
+    try {
+      if (navigator.share) await navigator.share({ title: ev.title, text, url });
+      else { await navigator.clipboard.writeText(`${text} ${url}`); toast('Einladungstext mit Link kopiert.'); }
+    } catch {}
+  }
+
+  $('#btnEvCreate').addEventListener('click', () => {
+    const title = $('#evTitle').value.trim();
+    const at = new Date($('#evAt').value).getTime();
+    if (!title || !Number.isFinite(at)) { toast('Bitte Titel sowie Datum und Uhrzeit angeben.'); return; }
+    send({ t: 'event:create', title, at, targetKm: parseFloat($('#evTarget').value.replace(',', '.')) || 0, note: $('#evNote').value });
+    $('#evTitle').value = '';
+    $('#evNote').value = '';
+    toast('Event angelegt – alle Mitglieder sehen es jetzt in „Community“.');
+  });
+
+  // ---------- Gespeicherte Läufe ----------
+  const openResults = new Set();
+  function renderHistory() {
+    const box = $('#history');
+    box.className = 'history';
+    box.textContent = '';
+    if (!results.length) { box.append(el('div', 'empty-note', 'Noch kein Lauf gespeichert. Nach „Lauf beenden“ erscheint die Rangliste hier.')); return; }
+    for (const r of results) {
+      const d = el('details');
+      d.open = openResults.has(r.id);
+      d.addEventListener('toggle', () => (d.open ? openResults.add(r.id) : openResults.delete(r.id)));
+      const s = el('summary', null, r.title);
+      s.append(el('small', null, `${fmtDate(r.startAt)} Uhr · ${r.ranking.length} Teilnehmer · ${r.targetKm > 0 ? String(r.targetKm).replace('.', ',') + ' km' : 'offene Distanz'}`));
+      d.append(s);
+      if (me && me.admin) {
+        const tools = el('div', 'tools');
+        const bCsv = el('button', 'btn small', 'Als Tabelle (CSV) laden');
+        bCsv.addEventListener('click', () => downloadCsv(r));
+        const bDel = el('button', 'btn small', 'Löschen');
+        bDel.addEventListener('click', () => { if (confirm(`Gespeicherten Lauf „${r.title}“ endgültig löschen?`)) send({ t: 'result:delete', id: r.id }); });
+        tools.append(bCsv, bDel);
+        d.append(tools);
+      }
+      const ol = el('ol');
+      r.ranking.forEach((x, i) => {
+        const li = el('li');
+        const nums = el('div', 'nums', fmtKm(x.distance) + ' km');
+        nums.append(el('small', null, `${fmtTime(x.timeMs)} · Ø ${x.distance >= 50 ? fmtPace(x.timeMs / (x.distance / 1000)) : '–:––'}`));
+        li.append(el('div', 'pos', i + 1), el('div', null, x.name + (x.finished ? ' 🏁' : '')), nums);
+        ol.append(li);
+      });
+      d.append(ol);
+      box.append(d);
+    }
+  }
+
+  function downloadCsv(r) {
+    const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const rows = [['Platz', 'Name', 'Distanz (km)', 'Zeit', 'Ø Pace (min/km)', 'Im Ziel', 'Kilometer-Runden']];
+    r.ranking.forEach((x, i) => rows.push([
+      i + 1, x.name, fmtKm(x.distance), fmtTime(x.timeMs), x.distance >= 50 ? fmtPace(x.timeMs / (x.distance / 1000)) : '',
+      x.finished ? 'ja' : 'nein', x.splits.map(fmtPace).join(' | '),
+    ]));
+    const csv = '﻿' + rows.map((row) => row.map(q).join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `${r.title.replace(/[^\wäöüÄÖÜß -]/g, '').trim() || 'Lauf'} ${fmtDay(r.startAt)}.csv`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  // ---------- Mitglieder (nur Organisator) ----------
+  function renderMembers() {
+    if (!me || !me.admin) return;
+    const ul = $('#members');
+    ul.textContent = '';
+    $('#memberCount').textContent = `· ${members.length}`;
+    const online = new Set(roster.filter((u) => u.online).map((u) => u.id));
+    for (const m of [...members].sort((a, b) => a.name.localeCompare(b.name))) {
+      const li = el('li');
+      const who = el('div', 'who', m.name + (m.organizer ? ' ⭐' : ''));
+      who.append(el('small', null, m.email));
+      const info = el('small', online.has(m.id) ? 'on' : null,
+        `dabei seit ${fmtDay(m.joinedAt)} · ${m.runs} ${m.runs === 1 ? 'Lauf' : 'Läufe'} · ${online.has(m.id) ? 'gerade online' : 'zuletzt ' + fmtDay(m.lastSeen)}`);
+      who.append(info);
+      li.append(who);
+      if (m.id !== me.id) {
+        const b = el('button', 'btn small', 'Entfernen');
+        b.addEventListener('click', () => { if (confirm(`${m.name} aus der Community entfernen?`)) send({ t: 'member:remove', id: m.id }); });
+        li.append(b);
+      }
+      ul.append(li);
+    }
+  }
+  $('#btnCopyMails').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(members.map((m) => m.email).join('; '));
+      toast(`${members.length} E-Mail-Adressen kopiert.`);
+    } catch { toast('Kopieren nicht möglich.'); }
+  });
+
+  // ---------- Als App installieren ----------
+  let installEvt = null;
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installEvt = e;
+    $('#btnInstall').hidden = false;
+    $('#btnInstall2').hidden = false;
+    $('#installInfo').hidden = true;
+  });
+  const doInstall = async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    await installEvt.userChoice.catch(() => {});
+    installEvt = null;
+    $('#btnInstall').hidden = true;
+    $('#btnInstall2').hidden = true;
+  };
+  $('#btnInstall').addEventListener('click', doInstall);
+  $('#btnInstall2').addEventListener('click', doInstall);
+  if (standalone) $('#installInfo').textContent = 'Die App ist auf diesem Gerät installiert.';
+  else if (isIos) {
+    $('#iosHint').hidden = false;
+    $('#installInfo').textContent = 'App-Icon: in Safari unten auf „Teilen“ tippen und „Zum Home-Bildschirm“ wählen.';
+  }
+  $('#btnLogout').addEventListener('click', () => {
+    stopReconnect = true;
+    if (ws) ws.close();
+    location.reload();
+  });
 
   // ---------- Chat ----------
   function addChat(c, initial) {
@@ -504,6 +750,7 @@
     document.querySelectorAll('.tab').forEach((el) => el.classList.toggle('active', el.id === 'tab-' + name));
     document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
     if (name === 'chat') { unread = 0; $('#chatBadge').hidden = true; scrollChat(); }
+    if (name === 'community') { $('#eventBadge').hidden = true; renderEvents(); renderMembers(); }
   }
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
@@ -686,14 +933,17 @@
 
   // ---------- Anmeldung ----------
   $('#nameInput').value = store.get('name') || '';
+  $('#emailInput').value = store.get('email') || '';
   let gpsStarted = false;
   $('#loginForm').addEventListener('submit', (e) => {
     e.preventDefault();
     myName = $('#nameInput').value.trim();
-    if (!myName) return;
+    myEmail = $('#emailInput').value.trim();
+    if (!myName || !myEmail) return;
     pin = $('#pinInput').value.trim();
     $('#pinInput').value = '';
     store.set('name', myName);
+    store.set('email', myEmail);
     $('#loginError').hidden = true;
     unlockAudio();     // Töne brauchen eine Nutzer-Geste
     keepAwake();

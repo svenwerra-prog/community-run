@@ -33,7 +33,7 @@ h2 { margin: 0 0 10px; font-size: 15px; text-transform: uppercase; letter-spacin
 .login-card label, .login-card details { text-align: left; }
 .logo { width: 72px; height: 72px; }
 label { display: block; font-size: 13px; color: var(--muted); margin-top: 12px; }
-input:not([type=checkbox]) {
+input:not([type=checkbox]), select {
   width: 100%; margin-top: 4px; padding: 12px; font-size: 16px; color: var(--text);
   background: #0f131a; border: 1px solid var(--line); border-radius: 10px; outline: none;
 }
@@ -122,7 +122,7 @@ main { flex: 1; min-height: 0; position: relative; }
 .tile .name { position: absolute; left: 8px; bottom: 8px; font-size: 12px; background: rgba(0, 0, 0, .55); padding: 2px 8px; border-radius: 99px; }
 .call-controls { display: flex; justify-content: center; gap: 18px; margin-top: 18px; }
 
-.tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); background: #12161d; padding-bottom: env(safe-area-inset-bottom); }
+.tabs { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); background: #12161d; padding-bottom: env(safe-area-inset-bottom); }
 .tabs button { position: relative; background: none; border: 0; color: var(--muted); padding: 8px 0 10px; font-size: 12px; cursor: pointer; }
 .tabs button span { display: block; font-size: 22px; }
 .tabs button.active { color: var(--accent); }
@@ -133,3 +133,42 @@ main { flex: 1; min-height: 0; position: relative; }
 .countdown #countNum { font-size: 40vmin; font-weight: 900; color: var(--accent); line-height: 1; font-variant-numeric: tabular-nums; }
 .countdown p { font-size: 20px; color: var(--muted); }
 .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 11; background: #000; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; max-width: 90vw; text-align: center; }
+
+/* ---------- Community, Events, gespeicherte Läufe ---------- */
+.btn.small { padding: 7px 12px; font-size: 13px; }
+.btn.yes.on { background: var(--ok); border-color: var(--ok); color: #06210f; }
+.btn.no.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.screen-hint { text-align: center; margin: -6px 0 14px; }
+input[type=datetime-local] { color-scheme: dark; }
+
+.event { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 10px; background: #12161d; }
+.event:last-child { margin-bottom: 0; }
+.event.done { opacity: .6; }
+.event.highlight { border-color: var(--accent); }
+.event h3 { margin: 0; font-size: 17px; }
+.event .when { color: var(--accent-2); font-weight: 600; font-size: 14px; margin-top: 2px; }
+.event .note { color: var(--muted); font-size: 14px; margin-top: 4px; overflow-wrap: anywhere; }
+.event .counts { font-size: 13px; margin-top: 8px; }
+.event .names { font-size: 13px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.event .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.event .actions .btn { flex: 1 1 auto; }
+.empty-note { color: var(--muted); font-size: 14px; text-align: center; padding: 6px 0; }
+
+.members { list-style: none; margin: 10px 0 0; padding: 0; }
+.members li { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.members li:last-child { border-bottom: 0; }
+.members .who { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.members .who small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.members .on { color: var(--ok); }
+
+.history details { border-bottom: 1px solid var(--line); padding: 8px 0; }
+.history details:last-child { border-bottom: 0; }
+.history summary { color: var(--text); font-weight: 600; font-size: 15px; }
+.history summary small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 16px; }
+.history ol { list-style: none; margin: 8px 0; padding: 0; }
+.history li { display: grid; grid-template-columns: 28px 1fr auto; gap: 8px; padding: 6px 0; font-variant-numeric: tabular-nums; font-size: 14px; color: var(--text); }
+.history li .pos { color: var(--muted); font-weight: 800; text-align: center; }
+.history li .nums { text-align: right; }
+.history li .nums small { display: block; color: var(--muted); font-size: 12px; }
+.history .tools { display: flex; gap: 8px; margin-bottom: 4px; }
+.tabs button { font-size: 11px; }

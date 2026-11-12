@@ -6,9 +6,12 @@
   <meta name="theme-color" content="#0e1116">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Community Run">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Community Run</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -22,6 +25,9 @@
     <label>Dein Name
       <input id="nameInput" maxlength="24" autocomplete="nickname" placeholder="z. B. Sven" required>
     </label>
+    <label>Deine E-Mail
+      <input id="emailInput" type="email" maxlength="120" autocomplete="email" inputmode="email" placeholder="name@beispiel.de" required>
+    </label>
     <details>
       <summary>Ich bin Organisator</summary>
       <label>Organisator-PIN
@@ -30,7 +36,10 @@
     </details>
     <p id="loginError" class="error" hidden></p>
     <button class="btn primary big" type="submit">Beitreten</button>
+    <p class="hint">Name und E-Mail werden gespeichert, damit du zur Community gehörst und zu Events eingeladen werden kannst. Deine E-Mail sieht nur der Organisator.</p>
     <p class="hint">Beim Beitreten fragt dein Handy nach dem Standort – bitte erlauben, damit Kilometer und Pace gemessen werden.</p>
+    <button id="btnInstall" class="btn big" type="button" hidden>📲 Als App auf den Startbildschirm</button>
+    <p id="iosHint" class="hint" hidden>📲 Als App installieren: in Safari unten auf <b>Teilen</b> tippen und <b>„Zum Home-Bildschirm“</b> wählen.</p>
   </form>
 </section>
 
@@ -66,18 +75,20 @@
         <ol id="splits" class="splits"><li class="muted empty">Noch keine Runde abgeschlossen.</li></ol>
       </div>
       <label class="toggle"><input type="checkbox" id="voiceToggle" checked> Ansage bei jedem Kilometer</label>
+      <p class="hint screen-hint">Bildschirm beim Laufen bitte eingeschaltet lassen – bei gesperrtem Handy wird nicht gemessen.</p>
 
       <div id="adminPanel" class="card admin" hidden>
         <h2>Organisator</h2>
-        <div class="row">
-          <label class="grow">Titel<input id="cfgTitle" maxlength="60"></label>
-        </div>
+        <label>Event (optional)
+          <select id="cfgEvent"><option value="">– freier Lauf ohne Event –</option></select>
+        </label>
+        <label>Titel<input id="cfgTitle" maxlength="60"></label>
         <div class="row">
           <label>Zieldistanz (km, 0 = offen)<input id="cfgTarget" type="number" min="0" step="0.5" inputmode="decimal"></label>
           <label>Countdown (s)<input id="cfgCountdown" type="number" min="3" max="120" value="10" inputmode="numeric"></label>
         </div>
         <button id="btnStart" class="btn primary big">Lauf für alle starten</button>
-        <button id="btnStop" class="btn danger big" hidden>Lauf beenden</button>
+        <button id="btnStop" class="btn danger big" hidden>Lauf beenden und Rangliste speichern</button>
         <button id="btnReset" class="btn big" hidden>Neuen Lauf vorbereiten</button>
         <p id="adminInfo" class="hint"></p>
       </div>
@@ -88,6 +99,39 @@
       <div class="card">
         <h2>Live-Rangliste <span id="boardCount" class="muted"></span></h2>
         <ul id="board" class="board"></ul>
+      </div>
+      <div class="card">
+        <h2>Gespeicherte Läufe</h2>
+        <div id="history"></div>
+      </div>
+    </div>
+
+    <!-- Community -->
+    <div id="tab-community" class="tab">
+      <div id="eventForm" class="card admin" hidden>
+        <h2>Neues Event anlegen</h2>
+        <label>Titel<input id="evTitle" maxlength="60" placeholder="z. B. Sonntagslauf 5 km"></label>
+        <div class="row">
+          <label>Datum und Uhrzeit<input id="evAt" type="datetime-local"></label>
+          <label>Distanz (km)<input id="evTarget" type="number" min="0" step="0.5" inputmode="decimal" value="5"></label>
+        </div>
+        <label>Hinweis (optional)<input id="evNote" maxlength="300" placeholder="z. B. Treffpunkt im Call 10 Minuten vorher"></label>
+        <button id="btnEvCreate" class="btn primary big" type="button">Event anlegen und einladen</button>
+      </div>
+      <div class="card">
+        <h2>Events</h2>
+        <div id="events"></div>
+      </div>
+      <div id="membersCard" class="card admin" hidden>
+        <h2>Community-Mitglieder <span id="memberCount" class="muted"></span></h2>
+        <button id="btnCopyMails" class="btn small" type="button">E-Mail-Adressen kopieren</button>
+        <ul id="members" class="members"></ul>
+      </div>
+      <div class="card">
+        <h2>App</h2>
+        <button id="btnInstall2" class="btn big" type="button" hidden>📲 Als App auf den Startbildschirm</button>
+        <p id="installInfo" class="hint">Tipp: Über das Browser-Menü „Zum Startbildschirm hinzufügen“ bekommst du ein App-Icon.</p>
+        <button id="btnLogout" class="btn small" type="button">Abmelden</button>
       </div>
     </div>
 
@@ -122,6 +166,7 @@
   <nav class="tabs">
     <button data-tab="run" class="active"><span>🏃</span>Lauf</button>
     <button data-tab="board"><span>🏆</span>Rangliste</button>
+    <button data-tab="community"><span>👥</span>Community<i id="eventBadge" class="dot" hidden></i></button>
     <button data-tab="chat"><span>💬</span>Chat<i id="chatBadge" class="dot" hidden></i></button>
     <button data-tab="call"><span>🎧</span>Call<i id="callBadge" class="dot live" hidden></i></button>
   </nav>
