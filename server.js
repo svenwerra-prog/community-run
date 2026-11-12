@@ -67,6 +67,7 @@ let state = {
   events: [],       // { id, title, at, targetKm, note, rsvp: { memberId: 'yes'|'no' }, done, createdAt }
   results: [],      // gespeicherte Ranglisten
   chat: [],
+  reports: [],      // gemeldete Nachrichten/Personen: { id, at, by, byName, targetId, targetName, msgId, text }
   run: newRun(1),
   stats: {},        // memberId -> Messwerte des aktuellen Laufs
 };
@@ -134,6 +135,41 @@ function memberList() {
   }));
 }
 const pushMembers = () => sendAdmins({ t: 'members', members: memberList() });
+const pushReports = () => sendAdmins({ t: 'reports', reports: state.reports });
+
+// Mitglied vollständig entfernen. anonymize: auch Name aus Ranglisten und eigene Chat-Nachrichten löschen
+// (Konto-Löschung durch das Mitglied selbst).
+function removeMember(id, anonymize) {
+  const s = sessions.get(id);
+  if (s) {
+    leaveCall(id);
+    send(s.ws, { t: anonymize ? 'deleted' : 'removed' });
+    sessions.delete(id);
+    s.ws.close();
+  }
+  const name = state.members[id] ? state.members[id].name : '';
+  delete state.members[id];
+  delete state.stats[id];
+  for (const e of state.events) delete e.rsvp[id];
+  for (const m of Object.values(state.members)) if (m.blocked) m.blocked = m.blocked.filter((x) => x !== id);
+  state.reports = state.reports.filter((r) => r.by !== id);
+  if (anonymize) {
+    for (const r of state.results) for (const x of r.ranking) if (x.id === id) { x.id = null; x.name = 'Gelöschtes Mitglied'; }
+    // eigene Nachrichten und automatische Hinweise, die den Namen nennen
+    const mentions = name ? [`${name} ist neu in der Community 👋`, `${name} ist dabei 👋`, `🏁 ${name} ist im Ziel!`] : [];
+    const isTheirs = (c) => c.from === id || (c.sys && mentions.includes(c.text));
+    const gone = state.chat.filter(isTheirs).map((c) => c.id);
+    state.chat = state.chat.filter((c) => !isTheirs(c));
+    for (const mid of gone) broadcast({ t: 'chat:removed', id: mid });
+    state.reports = state.reports.filter((r) => r.targetId !== id);
+    pushResults();
+  }
+  pushEvents();
+  pushMembers();
+  pushReports();
+  rosterDirty = true;
+  persist(true);
+}
 const pushEvents = () => broadcast({ t: 'events', events: state.events });
 const pushResults = () => broadcast({ t: 'results', results: state.results });
 
@@ -235,6 +271,9 @@ wss.on('connection', (ws) => {
 
       const now = Date.now();
       let mem = Object.values(state.members).find((x) => x.email === email);
+      if ((!mem || !mem.acceptedAt) && m.accept !== true) {
+        return send(ws, { t: 'loginError', text: 'Bitte Nutzungsregeln und Datenschutzhinweise akzeptieren.' });
+      }
       const isNew = !mem;
       if (!mem) {
         mem = { id: uid(), name, email, organizer: false, tokens: [], joinedAt: now, lastSeen: now };
@@ -244,6 +283,7 @@ wss.on('connection', (ws) => {
       if (mem.tokens.length > 10) mem.tokens.shift();
       mem.name = name;
       mem.lastSeen = now;
+      if (m.accept === true && !mem.acceptedAt) mem.acceptedAt = now;
       const admin = state.adminTokens.includes(th);
       if (admin) mem.organizer = true;
 
@@ -258,8 +298,9 @@ wss.on('connection', (ws) => {
       session = { ws, admin, inCall: false, video: false, audio: true };
       sessions.set(mem.id, session);
       send(ws, {
-        t: 'welcome', you: { id: mem.id, name: mem.name, admin }, run: state.run, chat: state.chat, roster: roster(),
-        events: state.events, results: state.results, members: admin ? memberList() : undefined, now: Date.now(), iceServers,
+        t: 'welcome', you: { id: mem.id, name: mem.name, admin, blocked: mem.blocked || [] }, run: state.run, chat: state.chat, roster: roster(),
+        events: state.events, results: state.results, members: admin ? memberList() : undefined,
+        reports: admin ? state.reports : undefined, now: Date.now(), iceServers,
       });
       if (isNew) sys(`${mem.name} ist neu in der Community 👋`);
       rosterDirty = true;
@@ -303,7 +344,55 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      case 'block': {
+        // Blockieren: Nachrichten und Ton/Video dieser Person werden beim Mitglied ausgeblendet
+        if (typeof m.id !== 'string' || m.id === member.id) return;
+        const list = new Set(member.blocked || []);
+        if (m.on && state.members[m.id]) list.add(m.id);
+        else list.delete(m.id);
+        member.blocked = [...list].slice(-200);
+        send(ws, { t: 'blocked', blocked: member.blocked });
+        persist(true);
+        break;
+      }
+      case 'report': {
+        const msg = state.chat.find((c) => c.id === m.msgId);
+        const targetId = msg ? msg.from : m.targetId;
+        const target = state.members[targetId];
+        if (!target || targetId === member.id) return;
+        if (state.reports.filter((r) => r.by === member.id).length >= 10) return send(ws, { t: 'reported', ok: false });
+        state.reports.unshift({
+          id: uid(), at: Date.now(), by: member.id, byName: member.name, targetId, targetName: target.name,
+          msgId: msg ? msg.id : null, text: msg ? msg.text : '',
+        });
+        if (state.reports.length > 200) state.reports.pop();
+        send(ws, { t: 'reported', ok: true });
+        pushReports();
+        persist(true);
+        break;
+      }
+      case 'account:delete':
+        removeMember(member.id, true);
+        break;
+
       // ----- nur Organisator -----
+      case 'report:close': {
+        if (!admin) return;
+        state.reports = state.reports.filter((r) => r.id !== m.id);
+        pushReports();
+        persist(true);
+        break;
+      }
+      case 'chat:delete': {
+        if (!admin) return;
+        const before = state.chat.length;
+        state.chat = state.chat.filter((c) => c.id !== m.id);
+        if (state.chat.length !== before) broadcast({ t: 'chat:removed', id: m.id });
+        state.reports = state.reports.filter((r) => r.msgId !== m.id);
+        pushReports();
+        persist(true);
+        break;
+      }
       case 'config': {
         if (!admin || run.status !== 'idle') return;
         run.title = clean(m.title, 60) || 'Community Run';
@@ -379,20 +468,7 @@ wss.on('connection', (ws) => {
       }
       case 'member:remove': {
         if (!admin || m.id === member.id || !state.members[m.id]) return;
-        const s = sessions.get(m.id);
-        if (s) {
-          leaveCall(m.id);
-          send(s.ws, { t: 'removed' });
-          sessions.delete(m.id);
-          s.ws.close();
-        }
-        delete state.members[m.id];
-        delete state.stats[m.id];
-        for (const e of state.events) delete e.rsvp[m.id];
-        pushEvents();
-        pushMembers();
-        rosterDirty = true;
-        persist(true);
+        removeMember(m.id, false);
         break;
       }
 
