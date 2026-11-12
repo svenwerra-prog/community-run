@@ -1,6 +1,6 @@
 {
-  "name": "Community Run",
-  "short_name": "CommunityRun",
+  "name": "Run._.Smile Community Run",
+  "short_name": "Run._.Smile",
   "description": "Virtueller Gemeinschaftslauf mit Live-Rangliste, Chat und Call",
   "id": "/",
   "start_url": "/",
@@ -8,8 +8,8 @@
   "display": "standalone",
   "orientation": "portrait",
   "lang": "de",
-  "background_color": "#0e1116",
-  "theme_color": "#0e1116",
+  "background_color": "#300885",
+  "theme_color": "#300885",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
