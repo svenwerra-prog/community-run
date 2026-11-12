@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e1116">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Community Run</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Anmeldung -->
+<section id="login" class="screen">
+  <form id="loginForm" class="card login-card">
+    <img src="icon.svg" alt="" class="logo">
+    <h1>Community Run</h1>
+    <p class="muted">Gemeinsam laufen – egal wo du bist.</p>
+    <label>Dein Name
+      <input id="nameInput" maxlength="24" autocomplete="nickname" placeholder="z. B. Sven" required>
+    </label>
+    <details>
+      <summary>Ich bin Organisator</summary>
+      <label>Organisator-PIN
+        <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN">
+      </label>
+    </details>
+    <p id="loginError" class="error" hidden></p>
+    <button class="btn primary big" type="submit">Beitreten</button>
+    <p class="hint">Beim Beitreten fragt dein Handy nach dem Standort – bitte erlauben, damit Kilometer und Pace gemessen werden.</p>
+  </form>
+</section>
+
+<!-- App -->
+<section id="app" class="screen" hidden>
+  <header class="topbar">
+    <div>
+      <div id="runTitle" class="title">Community Run</div>
+      <div id="runSub" class="sub">Warten auf den Start</div>
+    </div>
+    <div class="status">
+      <span id="gpsBadge" class="badge">GPS …</span>
+      <span id="connBadge" class="badge">offline</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Lauf -->
+    <div id="tab-run" class="tab active">
+      <div id="statePanel" class="state idle">
+        <div id="stateText" class="state-text">Warten auf den Start durch den Organisator</div>
+        <div id="timer" class="timer">00:00</div>
+      </div>
+      <div class="metrics">
+        <div class="metric wide"><span id="mDist" class="val">0,00</span><span class="lbl">Kilometer</span></div>
+        <div class="metric"><span id="mAvg" class="val">–:––</span><span class="lbl">Ø Pace /km</span></div>
+        <div class="metric"><span id="mNow" class="val">–:––</span><span class="lbl">Aktuelle Pace</span></div>
+        <div class="metric"><span id="mLap" class="val">–:––</span><span class="lbl">Pace Runde <span id="lapNo">1</span></span></div>
+        <div class="metric"><span id="mLast" class="val">–:––</span><span class="lbl">Letzter km</span></div>
+      </div>
+      <div class="card">
+        <h2>Kilometer-Runden</h2>
+        <ol id="splits" class="splits"><li class="muted empty">Noch keine Runde abgeschlossen.</li></ol>
+      </div>
+      <label class="toggle"><input type="checkbox" id="voiceToggle" checked> Ansage bei jedem Kilometer</label>
+
+      <div id="adminPanel" class="card admin" hidden>
+        <h2>Organisator</h2>
+        <div class="row">
+          <label class="grow">Titel<input id="cfgTitle" maxlength="60"></label>
+        </div>
+        <div class="row">
+          <label>Zieldistanz (km, 0 = offen)<input id="cfgTarget" type="number" min="0" step="0.5" inputmode="decimal"></label>
+          <label>Countdown (s)<input id="cfgCountdown" type="number" min="3" max="120" value="10" inputmode="numeric"></label>
+        </div>
+        <button id="btnStart" class="btn primary big">Lauf für alle starten</button>
+        <button id="btnStop" class="btn danger big" hidden>Lauf beenden</button>
+        <button id="btnReset" class="btn big" hidden>Neuen Lauf vorbereiten</button>
+        <p id="adminInfo" class="hint"></p>
+      </div>
+    </div>
+
+    <!-- Rangliste -->
+    <div id="tab-board" class="tab">
+      <div class="card">
+        <h2>Live-Rangliste <span id="boardCount" class="muted"></span></h2>
+        <ul id="board" class="board"></ul>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div id="tab-chat" class="tab chat-tab">
+      <div id="chatList" class="chat-list"></div>
+      <form id="chatForm" class="chat-form">
+        <input id="chatInput" maxlength="500" autocomplete="off" placeholder="Nachricht …">
+        <button class="btn primary" type="submit">Senden</button>
+      </form>
+    </div>
+
+    <!-- Call -->
+    <div id="tab-call" class="tab">
+      <div id="callLobby" class="card">
+        <h2>Gemeinsam sprechen</h2>
+        <p class="muted">Verbinde dich während des Laufs per Ton oder mit Video. <span id="callWho"></span></p>
+        <button id="btnJoinAudio" class="btn primary big">🎧 Nur mit Ton beitreten</button>
+        <button id="btnJoinVideo" class="btn big">📹 Mit Video beitreten</button>
+      </div>
+      <div id="callRoom" hidden>
+        <div id="tiles" class="tiles"></div>
+        <div class="call-controls">
+          <button id="btnMic" class="btn round" title="Mikrofon">🎙️</button>
+          <button id="btnCam" class="btn round" title="Kamera">📷</button>
+          <button id="btnLeave" class="btn round danger" title="Auflegen">📞</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <nav class="tabs">
+    <button data-tab="run" class="active"><span>🏃</span>Lauf</button>
+    <button data-tab="board"><span>🏆</span>Rangliste</button>
+    <button data-tab="chat"><span>💬</span>Chat<i id="chatBadge" class="dot" hidden></i></button>
+    <button data-tab="call"><span>🎧</span>Call<i id="callBadge" class="dot live" hidden></i></button>
+  </nav>
+</section>
+
+<div id="countdown" class="countdown" hidden><div id="countNum">10</div><p>Gleich geht's los!</p></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
