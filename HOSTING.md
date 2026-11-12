@@ -30,13 +30,27 @@ Git muss auf deinem Rechner nicht installiert sein – alles geht im Browser.
 3. Kurzen Probelauf starten (z. B. Zieldistanz 0,2 km) und einmal den Call mit Ton und Video ausprobieren.
 4. Tipp: Im Browser-Menü **„Zum Startbildschirm hinzufügen“** – dann startet die App wie eine normale App.
 
+## 4. Datenbank anbinden (damit nichts verloren geht)
+
+Mitglieder, Events, Zusagen, gespeicherte Ranglisten und der Chat liegen in einer Datenbank.
+Ohne Datenbank merkt sich der Server alles nur bis zum nächsten Neustart.
+
+1. Auf neon.com (bzw. neon.tech) ein kostenloses Konto anlegen und ein Projekt erstellen (Region: Europa/Frankfurt).
+2. Im Projekt auf **Connect** klicken und die **Connection string** kopieren (beginnt mit `postgresql://…`).
+   Diese Adresse enthält das Datenbank-Passwort – nicht weitergeben, nicht in den Code schreiben.
+3. Bei Render den Dienst `community-run` öffnen → **Environment** → **Add Environment Variable**:
+   Key `DATABASE_URL`, Value die kopierte Adresse → **Save, rebuild, and deploy**.
+4. Prüfen: In Render unter **Logs** steht beim Start `Speicher: Datenbank (PostgreSQL)`.
+   Steht dort `Speicher: Datei`, ist die Adresse nicht angekommen oder falsch.
+
 ## Vor dem Lauftag wichtig
 
 - **Gratis-Tarif schläft ein:** Ohne Besucher wird der Dienst nach einigen Minuten pausiert; der erste Aufruf dauert
   dann bis zu einer Minute. Öffne die App deshalb rechtzeitig vor dem Start. Solange jemand angemeldet ist, hält die
   App den Server wach. Wer ganz sicher gehen will, stellt in Render für den Lauftag auf den kleinsten bezahlten Tarif
   um (Einstellung „Instance Type“) – danach wieder zurück.
-- **Nicht neu deployen, während ein Lauf läuft:** Ein Neustart leert Rangliste und Chat.
+- **Nicht neu deployen, während ein Lauf läuft:** Mit Datenbank bleibt der Stand erhalten, aber alle Geräte
+  verlieren kurz die Verbindung.
 - **Call hinter strengen Netzen:** Wenn sich einzelne Teilnehmer im Mobilfunk nicht hören, fehlt ein TURN-Server.
   Zugangsdaten eines TURN-Anbieters in Render unter **Environment** als `TURN_URL`, `TURN_USER`, `TURN_PASS` eintragen.
 - **Änderungen einspielen:** Geänderte Dateien bei GitHub erneut hochladen – Render aktualisiert die App automatisch.

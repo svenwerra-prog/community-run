@@ -35,4 +35,7 @@ Optionale Umgebungsvariablen: `PORT`, `ADMIN_PIN`, `TURN_URL`, `TURN_USER`, `TUR
 
 - Der Bildschirm muss beim Laufen an bleiben (die App hält ihn wach). Browser messen GPS nicht bei gesperrtem Handy.
 - Ton/Video verbindet jeden mit jedem – gut bis etwa 6–8 Personen gleichzeitig im Call.
-- Der Server merkt sich alles nur im Arbeitsspeicher; nach einem Neustart sind Rangliste und Chat leer.
+- Gespeichert wird in PostgreSQL, wenn `DATABASE_URL` gesetzt ist, sonst in `data/state.json` (lokal ausreichend,
+  auf Gratis-Hostern nicht dauerhaft).
+- Anmeldung mit Name + E-Mail ohne Bestätigungsmail: Wer die E-Mail eines Mitglieds kennt, kann sich als dieses
+  Mitglied anmelden. Organisator-Rechte hängen dagegen an der PIN, nicht an der E-Mail.

@@ -11,5 +11,7 @@ services:
     envVars:
       - key: ADMIN_PIN
         sync: false   # Render fragt den Wert beim Einrichten ab; er steht nicht im Code
+      - key: DATABASE_URL
+        sync: false   # Zugangsadresse der Datenbank (z. B. Neon); ohne sie gehen Daten bei jedem Neustart verloren
       - key: NODE_VERSION
         value: "22"
