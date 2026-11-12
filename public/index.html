@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#300885">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Run._.Smile">
+  <meta name="apple-mobile-web-app-title" content="LiqVits Run">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Run._.Smile Community Run</title>
+  <title>LiqVits Community Run</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-180.png">
@@ -19,9 +19,11 @@
 <!-- Anmeldung -->
 <section id="login" class="screen">
   <form id="loginForm" class="card login-card">
-    <img src="icon.svg" alt="" class="logo">
-    <h1 class="brand-name">Run._.Smile</h1>
-    <p class="brand-sub">Community Run</p>
+    <!-- Offizielles Logo: Datei public/liqvits-logo.png ablegen, dann erscheint es hier automatisch -->
+    <img id="brandLogo" class="brand-logo" src="liqvits-logo.png" alt="LiqVits" hidden onload="this.hidden=false;document.getElementById('appIcon').hidden=true">
+    <img id="appIcon" src="icon.svg" alt="" class="logo">
+    <h1 class="brand-name">LiqVits<br>Community Run</h1>
+    <p class="brand-sub">mit Run._.Smile</p>
     <p class="muted">Gemeinsam laufen – egal wo du bist.</p>
     <label>Dein Name
       <input id="nameInput" maxlength="24" autocomplete="nickname" placeholder="z. B. Sven" required>
@@ -48,7 +50,7 @@
 <section id="app" class="screen" hidden>
   <header class="topbar">
     <div>
-      <div class="brand">Run._.Smile</div>
+      <div class="brand">LiqVits × Run._.Smile</div>
       <div id="runTitle" class="title">Community Run</div>
       <div id="runSub" class="sub">Warten auf den Start</div>
     </div>
@@ -71,6 +73,10 @@
         <div class="metric"><span id="mNow" class="val">–:––</span><span class="lbl">Aktuelle Pace</span></div>
         <div class="metric"><span id="mLap" class="val">–:––</span><span class="lbl">Pace Runde <span id="lapNo">1</span></span></div>
         <div class="metric"><span id="mLast" class="val">–:––</span><span class="lbl">Letzter km</span></div>
+      </div>
+      <div id="hostCard" class="host" hidden>
+        <div id="hostLine" class="host-line"></div>
+        <div id="hostDiff" class="host-diff"></div>
       </div>
       <div class="card">
         <h2>Kilometer-Runden</h2>

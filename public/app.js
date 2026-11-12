@@ -6,6 +6,9 @@
   // Testhilfen: ?sim=3 simuliert einen Lauf mit 3 m/s, ?u=xyz trennt mehrere Test-Teilnehmer im selben Browser
   const SIM = params.has('sim') ? parseFloat(params.get('sim')) || 3 : 0;
   const NS = 'cr_' + (params.get('u') || '') + '_';
+  // Nur in der Android-App gesetzt (mobile/native/native.js); im Browser bleibt beides leer
+  const SERVER = ((window.CR_CONFIG || {}).server || '').replace(/\/+$/, ''); // z. B. https://community-run.onrender.com
+  const NATIVE = window.CRNative || null;                                     // GPS im Hintergrund, Sprachansage
   const store = {
     get(k) { try { return localStorage.getItem(NS + k); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(NS + k, v); } catch {} },
@@ -90,7 +93,9 @@
     } catch {}
   }
   function speak(text) {
-    if (!$('#voiceToggle').checked || !('speechSynthesis' in window)) return;
+    if (!$('#voiceToggle').checked) return;
+    if (NATIVE) { NATIVE.speak(text); return; }
+    if (!('speechSynthesis' in window)) return;
     try {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'de-DE';
@@ -111,33 +116,66 @@
       }
     } catch {}
   }
-  document.addEventListener('visibilitychange', () => { if (loggedIn) keepAwake(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!loggedIn) return;
+    keepAwake();
+    if (document.visibilityState === 'visible') checkConnection(); // nach dem Entsperren sofort aufholen
+  });
 
   // Server wach halten: manche Hoster legen Gratis-Dienste ohne normale Seitenaufrufe schlafen
-  setInterval(() => { if (loggedIn) fetch('/healthz', { cache: 'no-store' }).catch(() => {}); }, 4 * 60 * 1000);
+  setInterval(() => {
+    if (loggedIn) fetch(SERVER + '/healthz', SERVER ? { cache: 'no-store', mode: 'no-cors' } : { cache: 'no-store' }).catch(() => {});
+  }, 4 * 60 * 1000);
 
   // ---------- Verbindung ----------
+  let reconnectTimer = null, lastMsgAt = 0;
   function send(msg) {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
   }
   function connect() {
-    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-    ws.onopen = () => {
+    clearTimeout(reconnectTimer);
+    const url = SERVER ? SERVER.replace(/^http/, 'ws') : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+    const sock = new WebSocket(url);
+    ws = sock;
+    sock.onopen = () => {
+      if (ws !== sock) return;
       send({ t: 'hello', token, name: myName, email: myEmail, pin: pin || undefined });
       bestRtt = Infinity;
       for (let i = 0; i < 5; i++) setTimeout(() => send({ t: 'ping', t0: Date.now() }), i * 400);
     };
-    ws.onmessage = (e) => {
+    sock.onmessage = (e) => {
+      if (ws !== sock) return;
+      lastMsgAt = Date.now();
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
       handle(m);
     };
-    ws.onclose = () => {
+    sock.onclose = () => {
+      if (ws !== sock) return;                 // bereits durch eine neue Verbindung ersetzt
       connected = false;
       renderBadges();
       if (inCall) closeAllPeers();
-      if (!stopReconnect) setTimeout(connect, 2000);
+      if (!stopReconnect) reconnectTimer = setTimeout(connect, 2000);
     };
+  }
+  // Verbindung sofort neu aufbauen (ohne die 2 Sekunden Wartezeit)
+  function reconnectNow() {
+    if (!loggedIn || stopReconnect) return;
+    const old = ws;
+    ws = null;
+    connected = false;
+    if (old) { try { old.close(); } catch {} }
+    if (inCall) closeAllPeers();
+    connect();
+  }
+  // Prüft z. B. nach dem Entsperren, ob die Verbindung noch lebt, und baut sie sonst neu auf
+  function checkConnection() {
+    if (!loggedIn || stopReconnect) return;
+    if (!ws || ws.readyState === 3) { reconnectNow(); return; }
+    if (ws.readyState !== 1) return;           // Aufbau läuft gerade
+    const sock = ws, sentAt = Date.now();
+    send({ t: 'ping', t0: sentAt });
+    setTimeout(() => { if (ws === sock && lastMsgAt < sentAt) reconnectNow(); }, 5000);
   }
 
   function handle(m) {
@@ -319,7 +357,7 @@
     gps = { acc, at: Date.now(), error: '' };
     if (!isActive()) { lastPt = null; return; }
     if (acc > 40) return;                       // zu ungenau
-    const t = now();
+    const t = now() - (pos.late || 0);          // App: verspätet zugestellte Positionen auf ihre Messzeit zurückrechnen
     if (!lastPt) { lastPt = { lat, lon, t }; return; }
     const d = haversine(lastPt, { lat, lon });
     if (d < 3) return;                          // GPS-Zittern im Stand ignorieren
@@ -332,6 +370,16 @@
   function startGps() {
     if (SIM) {
       setInterval(() => addDistance(SIM * (0.9 + Math.random() * 0.2), now()), 1000);
+      return;
+    }
+    if (NATIVE) {
+      // Android-App: Standort kommt vom Vordergrunddienst und läuft bei gesperrtem Bildschirm weiter.
+      // Im Hintergrund bremst Android Zeitgeber – deshalb hängen Senden und Verbindungsprüfung hier an jeder Position.
+      NATIVE.startGps((pos) => {
+        onFix(pos);
+        if (!ws || ws.readyState === 3) checkConnection();
+        if (Date.now() - lastStatsAt > 4000 && run.status === 'running' && track && now() >= run.startAt) sendStats();
+      }, (text) => { gps.error = text; });
       return;
     }
     if (!('geolocation' in navigator)) { gps.error = 'kein GPS'; return; }
@@ -354,8 +402,10 @@
     return (b.t - a.t) / ((b.d - a.d) / 1000);
   }
 
+  let lastStatsAt = 0;
   function sendStats() {
     if (!track || run.status === 'idle') return;
+    lastStatsAt = Date.now();
     send({
       t: 'stats', runId: run.id, distance: track.distance, elapsed: elapsedMs(),
       splits: track.splits, lap: lapPace() || 0, finished: track.finished, finishMs: track.finishMs,
@@ -406,6 +456,7 @@
     $('#mLap').textContent = fmtPace(lapPace());
     $('#lapNo').textContent = track ? track.splits.length + 1 : 1;
     $('#mLast').textContent = track && track.splits.length ? fmtPace(track.splits[track.splits.length - 1]) : '–:––';
+    renderHost();
     renderBadges();
   }
   setInterval(render, 250);
@@ -443,6 +494,30 @@
     g.className = 'badge ' + (gps.acc <= 20 ? 'ok' : 'warn');
   }
 
+  // Hauptläufer (Organisator): sein Stand und der eigene Abstand zu ihm
+  const fmtGap = (m) => (m >= 1000 ? fmtKm(m) + ' km' : Math.round(m / 10) * 10 + ' m');
+  function renderHost() {
+    const box = $('#hostCard');
+    const host = roster.find((u) => u.organizer);
+    if (!host || !me || run.status === 'idle' || (run.startAt && now() < run.startAt)) { box.hidden = true; return; }
+    const diffEl = $('#hostDiff');
+    if (host.id === me.id) {
+      const others = roster.filter((u) => u.id !== me.id && u.stats.distance > 0);
+      $('#hostLine').textContent = '⭐ Du bist der Hauptläufer';
+      diffEl.className = 'host-diff';
+      diffEl.textContent = others.length === 1 ? '1 Person läuft mit dir' : others.length ? `${others.length} laufen mit dir` : 'Die Community läuft mit dir';
+      box.hidden = false;
+      return;
+    }
+    const s = host.stats;
+    const t = s.finished ? s.finishMs : s.elapsed;
+    $('#hostLine').textContent = `⭐ ${host.name} (Hauptläufer): ${fmtKm(s.distance)} km` + (s.distance >= 50 ? ` · Ø ${fmtPace(t / (s.distance / 1000))}` : '');
+    const gap = (track ? track.distance : 0) - s.distance;
+    diffEl.className = 'host-diff' + (gap < -20 ? ' behind' : '');
+    diffEl.textContent = Math.abs(gap) <= 20 ? `Gleichauf mit ${host.name}` : gap > 0 ? `${fmtGap(gap)} vor ${host.name}` : `${fmtGap(-gap)} hinter ${host.name}`;
+    box.hidden = false;
+  }
+
   function renderBoard() {
     const ul = $('#board');
     ul.textContent = '';
@@ -460,7 +535,8 @@
       if (!u.online) li.classList.add('offline');
       const pos = document.createElement('div'); pos.className = 'pos'; pos.textContent = s.finished ? '🏁' : i + 1;
       const who = document.createElement('div'); who.className = 'who';
-      who.textContent = u.name + (u.organizer ? ' ⭐' : '') + (u.inCall ? ' 🎧' : '');
+      who.textContent = u.name + (u.inCall ? ' 🎧' : '');
+      if (u.organizer) who.append(el('span', 'host-tag', '⭐ Hauptläufer'));
       const small = document.createElement('small');
       small.textContent = !u.online ? 'offline' : s.finished ? `im Ziel nach ${fmtTime(s.finishMs)}`
         : s.splits.length ? `letzter km ${fmtPace(s.splits[s.splits.length - 1])}` : run.status === 'running' ? 'unterwegs' : 'bereit';
@@ -574,7 +650,7 @@
   }
 
   async function shareEvent(ev) {
-    const url = `${location.origin}/?event=${encodeURIComponent(ev.id)}`;
+    const url = `${SERVER || location.origin}/?event=${encodeURIComponent(ev.id)}`;
     const text = `Community Run: ${ev.title} am ${fmtDate(ev.at)} Uhr – bist du dabei? Hier zu- oder absagen:`;
     try {
       if (navigator.share) await navigator.share({ title: ev.title, text, url });

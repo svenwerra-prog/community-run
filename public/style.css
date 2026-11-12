@@ -44,7 +44,15 @@ h2 { margin: 0 0 10px; font: 900 15px/1.2 var(--head); text-transform: uppercase
 .login-card { width: 100%; max-width: 390px; text-align: center; border: 0; box-shadow: 0 18px 40px rgba(26, 16, 51, .35); margin: auto; }
 .login-card label, .login-card details { text-align: left; }
 .logo { width: 76px; height: 76px; border-radius: 22px; }
-.brand-name { color: var(--purple); }
+.brand-name { color: var(--purple); font-size: 30px; }
+.brand-logo { display: block; max-width: 190px; max-height: 110px; margin: 0 auto 6px; }
+
+/* Hauptläufer: Stand und Abstand während des Laufs */
+.host { background: var(--purple); color: #fff; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 12px; text-align: center; }
+.host-line { font: 800 15px var(--body); font-variant-numeric: tabular-nums; }
+.host-diff { font: 900 20px/1.2 var(--head); letter-spacing: -.02em; color: var(--mint); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.host-diff.behind { color: var(--yellow); }
+.host-tag { display: inline-block; font: 800 10px var(--body); text-transform: uppercase; letter-spacing: .06em; background: var(--yellow); color: #3a3000; border-radius: 99px; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
 .brand-sub { font: 900 15px/1 var(--head); text-transform: uppercase; letter-spacing: .08em; color: var(--pink); margin: 6px 0 2px; }
 label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 12px; }
 input:not([type=checkbox]), select {
